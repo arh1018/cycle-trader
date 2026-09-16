@@ -102,12 +102,16 @@ public final class LiveExecutor implements Executor {
         return new TriangleExecutionResult(opp, results);
     }
 
-    /** Sells {@code amount} of {@code irtMarket.src} back to rial at the current bid. Used by recovery. */
-    public LegResult sellToRial(Market irtMarket, double amount) {
-        TriangleLeg leg = new TriangleLeg(irtMarket, Side.SELL);
-        OrderBookTop top = books.get(irtMarket.symbol);
+    /**
+     * Sells {@code amount} of {@code market.src} on {@code market} at the current bid, with the same
+     * bounded limit price and exact fill accounting as a triangle leg. Recovery uses it on the
+     * coin's IRT market; it works equally on a USDT market.
+     */
+    public LegResult sell(Market market, double amount) {
+        TriangleLeg leg = new TriangleLeg(market, Side.SELL);
+        OrderBookTop top = books.get(market.symbol);
         if (top == null || top.isStale(System.currentTimeMillis(), cfg.maxBookAgeMillis) || !top.isSane()) {
-            return LegResult.failed(leg, amount, "no live book for " + irtMarket.symbol);
+            return LegResult.failed(leg, amount, "no live book for " + market.symbol);
         }
         return executeLeg(leg, amount, top.bestBid, top.priceDecimals);
     }
@@ -199,7 +203,7 @@ public final class LiveExecutor implements Executor {
         double amountOut = Math.max(0, grossOut - fee);
         consumed = Math.min(consumed, amountIn);
 
-        return LegResult.filled(leg, amountIn, consumed, amountOut, avgPrice, receipt.id());
+        return LegResult.filled(leg, amountIn, amount.doubleValue(), matched, consumed, amountOut, avgPrice, receipt.id());
     }
 
     /**

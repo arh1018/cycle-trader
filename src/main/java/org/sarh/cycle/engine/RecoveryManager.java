@@ -86,7 +86,7 @@ public final class RecoveryManager {
                 continue;
             }
 
-            LegResult r = executor.sellToRial(irtMarket, toSell);
+            LegResult r = executor.sell(irtMarket, toSell);
             recoveryLegs.add(r);
             log.info("episode {} recovery attempt {}: {}", episodeId, attemptNo, r);
             double left = amount - r.amountConsumed;

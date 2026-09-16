@@ -28,7 +28,7 @@ universe:
 
 fees:
   # Per-leg taker fee assumption. Override with your real 30-day-volume tier.
-  taker_fee_irt: 0.0010    # <base>IRT and USDTIRT legs
+  taker_fee_irt: 0.0013    # <base>IRT and USDTIRT legs
   taker_fee_usdt: 0.0009   # <base>USDT legs
   # Extra haircut modelling slippage beyond top-of-book (spread eats more of
   # the edge the deeper an order walks the book).
@@ -41,8 +41,11 @@ detection:
   # Top-of-book depth is not currently checked, so keep this modest relative
   # to the thinnest leg's visible size -- see README.
   trade_notional_irt: 5000000
-  # Nobitex rejects any IRT order under this amount.
-  min_order_rial: 3000000
+  # Nobitex rejects any IRT order under ~500,000 rial. MEASURED, not assumed:
+  # 398,030 rejected, 497,538 accepted. The documented 3,000,000 is 6x too
+  # high and, used as a floor, leaves positions that fall below it unsellable.
+  # A little headroom so amount rounding cannot drop under the real limit.
+  min_order_rial: 550000
   # Nobitex's minimum for USDT-quoted orders, in USDT. Verify against your
   # account -- a too-small middle leg aborts the triangle after leg 1 filled.
   min_order_usdt: 11

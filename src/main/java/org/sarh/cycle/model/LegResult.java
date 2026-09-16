@@ -33,10 +33,19 @@ public final class LegResult {
         this.note = note;
     }
 
-    public static LegResult filled(TriangleLeg leg, double amountIn, double amountConsumed, double amountOut,
-                                    double avgPrice, Long exchangeOrderId) {
-        Status s = amountConsumed + 1e-12 < amountIn ? Status.PARTIAL : Status.FILLED;
-        return new LegResult(leg, s, amountIn, amountConsumed, amountOut, avgPrice, exchangeOrderId, "");
+    /**
+     * @param orderedSrc  src-currency amount actually sent to the exchange (after step rounding)
+     * @param matchedSrc  src-currency amount the exchange reports as matched
+     *
+     * FILLED vs PARTIAL is decided on what was ordered, not on {@code amountIn}: the step-rounding
+     * remainder between the two is genuine leftover input (and is accounted for as such), but a
+     * fully matched order is not a partial fill.
+     */
+    public static LegResult filled(TriangleLeg leg, double amountIn, double orderedSrc, double matchedSrc,
+                                    double amountConsumed, double amountOut, double avgPrice, Long exchangeOrderId) {
+        boolean complete = matchedSrc >= orderedSrc * (1 - 1e-9);
+        return new LegResult(leg, complete ? Status.FILLED : Status.PARTIAL, amountIn, amountConsumed, amountOut,
+                avgPrice, exchangeOrderId, "");
     }
 
     public static LegResult failed(TriangleLeg leg, double amountIn, String note) {

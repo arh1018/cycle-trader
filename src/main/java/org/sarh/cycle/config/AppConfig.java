@@ -117,7 +117,9 @@ public final class AppConfig {
 
     /**
      * {@code detection.min_order_rial} -- Nobitex's minimum for rial-quoted orders, in rial.
-     * Default {@code 3,000,000}. Rial legs below this are rejected before an order is sent.
+     * Default {@code 550,000}: the exchange's real floor was measured at ~500,000 (398,030 rejected,
+     * 497,538 accepted); the documented 3,000,000 is 6x too high. Rial legs below this are refused
+     * before an order is sent.
      */
     public final double minOrderRial;
 
@@ -225,7 +227,7 @@ public final class AppConfig {
         Map<String, Object> detection = section(y, "detection");
         this.minProfitRatio = num(detection, "min_profit_ratio", 0.0015);
         this.tradeNotionalIrt = num(detection, "trade_notional_irt", 5_000_000);
-        this.minOrderRial = num(detection, "min_order_rial", 3_000_000);
+        this.minOrderRial = num(detection, "min_order_rial", 550_000);
         this.minOrderUsdt = num(detection, "min_order_usdt", 11);
         this.maxBookAgeMillis = (long) (num(detection, "max_book_age_s", 10d) * 1000);
 

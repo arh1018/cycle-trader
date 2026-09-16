@@ -94,7 +94,14 @@ public final class NobitexRestClient {
         return "ok".equals(post("/market/orders/update-status", body).path("status").asText());
     }
 
-    /** Free (not blocked in open orders) balance of one currency, from /users/wallets/list. */
+    /**
+     * Free (not blocked in open orders) balance of one currency, from /users/wallets/list.
+     *
+     * <p>Observed to lag fills by several seconds: read immediately after 24 filled orders it
+     * showed ~25% less rial and USDT than the orders' own records, and caught up within a minute.
+     * Never size the next leg from this -- use the previous order's reported proceeds. It is fine
+     * as a conservative pre-check and as an upper bound for recovery sells.
+     */
     public double freeBalance(String currency) {
         requireAuth();
         JsonNode wallets = get("/users/wallets/list", "").path("wallets");

@@ -96,12 +96,17 @@ public final class App {
 
         scheduler.scheduleAtFixedRate(() -> log.info("feed: {} book updates so far across {} of {} symbols",
                 books.updateCount(), books.symbolCount(), channels.size()), 60, 60, TimeUnit.SECONDS);
+        if (cfg.summaryIntervalS > 0) {
+            scheduler.scheduleAtFixedRate(() -> log.info(detectorRef[0].nearMissReport(10)),
+                    cfg.summaryIntervalS, cfg.summaryIntervalS, TimeUnit.SECONDS);
+        }
 
         CountDownLatch shutdown = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             log.info("shutting down");
             ws.stop();
             coordinator.shutdown();
+            log.info(detectorRef[0].nearMissReport(10));
             scheduler.shutdownNow();
             shutdown.countDown();
         }));

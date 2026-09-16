@@ -2,6 +2,7 @@ package org.sarh.cycle.engine;
 
 import org.sarh.cycle.model.LegResult;
 import org.sarh.cycle.model.Opportunity;
+import org.sarh.cycle.model.Side;
 import org.sarh.cycle.model.TriangleExecutionResult;
 import org.sarh.cycle.model.TriangleLeg;
 
@@ -22,7 +23,8 @@ public final class PaperExecutor implements Executor {
         for (int i = 0; i < opp.triangle.legs.size(); i++) {
             TriangleLeg leg = opp.triangle.legs.get(i);
             double amountOut = opp.legAmountsOut[i];
-            legs.add(LegResult.filled(leg, amountIn, amountIn, amountOut, opp.legPrices[i], null));
+            double srcAmount = leg.side == Side.BUY ? amountIn / opp.legPrices[i] : amountIn;
+            legs.add(LegResult.filled(leg, amountIn, srcAmount, srcAmount, amountIn, amountOut, opp.legPrices[i], null));
             amountIn = amountOut;
         }
         return new TriangleExecutionResult(opp, legs);

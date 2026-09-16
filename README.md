@@ -155,6 +155,7 @@ default. The ones that decide whether you make or lose money:
 | `fees.slippage` | 0.10% | Per-leg haircut beyond the touch. Increase it for thin coins. |
 | `detection.min_profit_ratio` | 0.15% | Net threshold after all three legs. Below ~0.1% you are trading noise. |
 | `detection.trade_notional_irt` | 5,000,000 | Rial per triangle. Depth is not checked -- keep it under the visible size at the touch of the thinnest leg. |
+| `detection.min_order_rial` | 550,000 | Nobitex's real rial-order floor, **measured** at ~500,000 (398,030 rejected, 497,538 accepted). The documented 3,000,000 is 6x too high; used as a floor it leaves small positions unsellable. |
 | `detection.min_order_usdt` | 11 | Nobitex's USDT-market minimum. If the middle leg is below this, leg 1 fills and leg 2 is rejected. **Verify for your account.** |
 | `execution.cross_by` | 0.5% | How far through the touch a leg may fill. Lower = fewer fills, higher = worse fills. |
 | `execution.recovery_delay_s` | 600 | How long stranded inventory sits before it is sold back to rial. |
@@ -255,9 +256,17 @@ src/main/java/org/sarh/cycle/
   takes `order`. `clientOrderId` lookups only see open orders, so the numeric
   id from the placement response is preferred for status polls.
 - **Fees** are charged on the asset received: the bought coin on a buy, the
-  quote currency on a sell. The reported `fee` is used when it is sane, and the
+  quote currency on a sell (verified on live fills: 0.10% rial / 0.09% USDT on
+  a base-tier account). The reported `fee` is used when it is sane, and the
   configured rate when it is larger -- under-estimating proceeds leaves dust;
   over-estimating gets the next leg rejected.
+- **Wallet balances lag fills** by several seconds. Read right after a burst of
+  orders, `/users/wallets/list` showed ~25% less than the orders' own records
+  and caught up within a minute. Leg sizing therefore never reads the wallet;
+  it uses the previous order's reported proceeds.
+- **Minimum order** on rial markets is ~500,000 rial (measured), not the
+  documented 3,000,000. Some USDT markets reject small sells with an opaque
+  `Order Validation Failed`; the engine treats that as a failed leg.
 - **Bots** should identify as `User-Agent: TraderBot/<name>`.
 
 ---
