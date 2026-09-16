@@ -13,21 +13,24 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Typed view over {@code config/config.yaml}, with credentials read from the environment.
+ * Typed view over {@code config/config.yaml}, with credentials read from the environment or .env.
  *
- * <p>Every field documents its YAML key and the default that applies when the key is absent.
- * Money amounts are in RIAL unless the name says otherwise; durations carry their unit in the name.
+ * <p>Every field documents its YAML key and the default that applies when the key is absent. Money
+ * amounts are in RIAL unless the name says otherwise; durations carry their unit in the name.
  */
 public final class AppConfig {
 
-    public enum Mode { PAPER, LIVE }
+    public enum Mode {
+        PAPER,
+        LIVE
+    }
 
     // -- mode ---------------------------------------------------------------------------------
 
     /**
-     * {@code mode} -- {@code paper} or {@code live}. Default {@code paper}.
-     * Paper detects and simulates fills at the detector's prices; no order ever reaches the
-     * exchange. Live places real orders and requires the API key pair below.
+     * {@code mode} -- {@code paper} or {@code live}. Default {@code paper}. Paper detects and
+     * simulates fills at the detector's prices; no order ever reaches the exchange. Live places
+     * real orders and requires the API key pair below.
      */
     public final Mode mode;
 
@@ -36,20 +39,23 @@ public final class AppConfig {
     /** {@code nobitex.rest_url} -- REST base URL. Default {@code https://apiv2.nobitex.ir}. */
     public final String restUrl;
 
-    /** {@code nobitex.ws_url} -- Centrifugo websocket URL. Default {@code wss://ws.nobitex.ir/connection/websocket}. */
+    /**
+     * {@code nobitex.ws_url} -- Centrifugo websocket URL. Default {@code
+     * wss://ws.nobitex.ir/connection/websocket}.
+     */
     public final String wsUrl;
 
     /**
-     * Env {@code NOBITEX_API_KEY} -- public half of an Ed25519 API key pair. Default unset.
-     * Never read from YAML. Resolved from the process environment first, then from a {@code .env}
-     * file in the working directory. Required in live mode; optional in paper mode.
+     * Env {@code NOBITEX_API_KEY} -- public half of an Ed25519 API key pair. Default unset. Never
+     * read from YAML. Resolved from the process environment first, then from a {@code .env} file in
+     * the working directory. Required in live mode; optional in paper mode.
      */
     public final String apiKey;
 
     /**
      * Env {@code NOBITEX_API_SECRET} -- private half of the key pair, shown once at creation.
-     * Default unset; same resolution as {@link #apiKey}. Looks identical to the public key
-     * (44 chars base64); do not swap them.
+     * Default unset; same resolution as {@link #apiKey}. Looks identical to the public key (44
+     * chars base64); do not swap them.
      */
     public final String apiSecret;
 
@@ -57,14 +63,15 @@ public final class AppConfig {
 
     /**
      * {@code universe.min_24h_rial_volume} -- drop a base coin whose {@code <BASE>IRT} book traded
-     * less than this in the last 24h, in rial. Default {@code 5,000,000,000} (500M toman).
-     * Thin books cannot absorb the notional and make the top-of-book estimate meaningless.
+     * less than this in the last 24h, in rial. Default {@code 5,000,000,000} (500M toman). Thin
+     * books cannot absorb the notional and make the top-of-book estimate meaningless.
      */
     public final long minVolume24hRial;
 
     /**
      * {@code universe.max_symbols} -- keep at most this many base coins, ranked by 24h rial volume.
-     * Default {@code 150}. Each base costs two websocket channels; Nobitex allows ~450 per connection.
+     * Default {@code 150}. Each base costs two websocket channels; Nobitex allows ~450 per
+     * connection.
      */
     public final int maxSymbols;
 
@@ -75,16 +82,17 @@ public final class AppConfig {
     public final boolean excludePrefixed;
 
     /**
-     * {@code universe.exclude_bases} -- base coins never to trade, case-insensitive.
-     * Default {@code ["USDT"]}. Stablecoins have no edge and USDT is the loop's own middle leg.
+     * {@code universe.exclude_bases} -- base coins never to trade, case-insensitive. Default {@code
+     * ["USDT"]}. Stablecoins have no edge and USDT is the loop's own middle leg.
      */
     public final List<String> excludeBases;
 
     // -- fees ---------------------------------------------------------------------------------
 
     /**
-     * {@code fees.taker_fee_irt} -- taker fee on rial-quoted legs ({@code <BASE>IRT}, {@code USDTIRT}),
-     * as a fraction. Default {@code 0.0010} (0.10%). Set it to your real 30-day-volume tier.
+     * {@code fees.taker_fee_irt} -- taker fee on rial-quoted legs ({@code <BASE>IRT}, {@code
+     * USDTIRT}), as a fraction. Default {@code 0.0010} (0.10%). Set it to your real 30-day-volume
+     * tier.
      */
     public final double takerFeeIrt;
 
@@ -103,8 +111,8 @@ public final class AppConfig {
     // -- detection ----------------------------------------------------------------------------
 
     /**
-     * {@code detection.min_profit_ratio} -- minimum net loop profit (after fees and slippage on
-     * all three legs) to act on, as a fraction. Default {@code 0.0015} (0.15%). Must be positive.
+     * {@code detection.min_profit_ratio} -- minimum net loop profit (after fees and slippage on all
+     * three legs) to act on, as a fraction. Default {@code 0.0015} (0.15%). Must be positive.
      */
     public final double minProfitRatio;
 
@@ -117,39 +125,72 @@ public final class AppConfig {
 
     /**
      * {@code detection.min_order_rial} -- Nobitex's minimum for rial-quoted orders, in rial.
-     * Default {@code 550,000}: the exchange's real floor was measured at ~500,000 (398,030 rejected,
-     * 497,538 accepted); the documented 3,000,000 is 6x too high. Rial legs below this are refused
-     * before an order is sent.
+     * Default {@code 550,000}: the exchange's real floor was measured at ~500,000 (398,030
+     * rejected, 497,538 accepted); the documented 3,000,000 is 6x too high. Rial legs below this
+     * are refused before an order is sent.
      */
     public final double minOrderRial;
 
     /**
      * {@code detection.min_order_usdt} -- Nobitex's minimum for USDT-quoted orders, in USDT.
-     * Default {@code 11}. An opportunity whose middle leg is below this is discarded, because
-     * leg 1 would fill and leg 2 would be rejected -- the worst outcome. Verify for your account.
+     * Default {@code 11}. An opportunity whose middle leg is below this is discarded, because leg 1
+     * would fill and leg 2 would be rejected -- the worst outcome. Verify for your account.
      */
     public final double minOrderUsdt;
 
     /**
      * {@code detection.max_book_age_s} -- ignore a book not updated for longer than this, in
-     * seconds (stored in milliseconds). Default {@code 10}. Guards against a stalled channel
-     * making a stale quote look like an edge.
+     * seconds (stored in milliseconds). Default {@code 10}. Guards against a stalled channel making
+     * a stale quote look like an edge.
      */
     public final long maxBookAgeMillis;
+
+    /**
+     * {@code detection.max_depth_levels} -- order-book levels kept per market for the depth walk.
+     * Default {@code 20}. A cycle whose size exceeds the visible depth is skipped, not guessed.
+     */
+    public final int maxDepthLevels;
+
+    // -- inventory ----------------------------------------------------------------------------
+
+    /**
+     * {@code inventory.rebalance_notionals} -- when a cycle's start currency is short, convert this
+     * many notionals' worth from the other quote pile via USDTIRT first. Default {@code 2}.
+     */
+    public final int rebalanceNotionals;
+
+    /**
+     * {@code inventory.reconcile_interval_s} -- how often to re-read wallet balances into the local
+     * inventory, in seconds; skipped while a trade is in flight because balances lag fills. Default
+     * {@code 60}.
+     */
+    public final int reconcileIntervalS;
+
+    /**
+     * {@code inventory.paper_start_irt} -- paper-mode rial pile when no API key is set. Default
+     * {@code 20,000,000}.
+     */
+    public final double paperStartIrt;
+
+    /**
+     * {@code inventory.paper_start_usdt} -- paper-mode USDT pile when no API key is set. Default
+     * {@code 10}.
+     */
+    public final double paperStartUsdt;
 
     // -- execution ----------------------------------------------------------------------------
 
     /**
-     * {@code execution.max_orders_per_10min} -- local ceiling on live orders per rolling 10 minutes.
-     * Default {@code 60}. Nobitex's own shared limit is 300; a leg refused by this budget aborts
-     * its triangle rather than risking an exchange-side block.
+     * {@code execution.max_orders_per_10min} -- local ceiling on live orders per rolling 10
+     * minutes. Default {@code 60}. Nobitex's own shared limit is 300; a leg refused by this budget
+     * aborts its triangle rather than risking an exchange-side block.
      */
     public final int maxOrdersPer10Min;
 
     /**
      * {@code execution.cross_by} -- how far through the touch a leg's limit price is placed, as a
-     * fraction. Default {@code 0.005} (0.5%); must be in (0, 0.05]. Fills immediately like a
-     * market order but cannot walk a thin book further than this.
+     * fraction. Default {@code 0.005} (0.5%); must be in (0, 0.05]. Fills immediately like a market
+     * order but cannot walk a thin book further than this.
      */
     public final double crossBy;
 
@@ -166,15 +207,40 @@ public final class AppConfig {
     public final int legTimeoutS;
 
     /**
+     * {@code execution.reject_retries} -- how many times to re-submit a leg the exchange explicitly
+     * rejected, after re-reading the balance. Default {@code 4}. Only rejections are retried; a
+     * transport error never is, because the order may have landed.
+     */
+    public final int rejectRetries;
+
+    /**
+     * {@code execution.reject_retry_wait_ms} -- pause before each such retry. Default {@code 1500}.
+     */
+    public final long rejectRetryWaitMs;
+
+    /**
      * {@code execution.cooldown_s} -- after a triangle runs or aborts, ignore it for this many
      * seconds. Default {@code 30}. Without it one persistent quote fires on every book tick.
      */
     public final int cooldownS;
 
     /**
-     * {@code execution.recovery_delay_s} -- when a live loop aborts with inventory stranded in
-     * BASE or USDT, wait this many seconds, then sell it back to rial. Default {@code 600}.
-     * The same delay separates retry attempts.
+     * {@code execution.loss_cooldown_s} -- after a cycle LOSES money, ignore that cycle for this
+     * many seconds. Default {@code 600}. A losing quote tends to persist; re-firing it compounds
+     * the loss.
+     */
+    public final int lossCooldownS;
+
+    /**
+     * {@code execution.max_daily_loss_irt} -- halt all trading (until restart) once realised losses
+     * over the trailing 24h reach this many rial. Default {@code 500,000}. {@code 0} disables.
+     */
+    public final double maxDailyLossIrt;
+
+    /**
+     * {@code execution.recovery_delay_s} -- when a live loop aborts with inventory stranded in BASE
+     * or USDT, wait this many seconds, then sell it back to rial. Default {@code 600}. The same
+     * delay separates retry attempts.
      */
     public final int recoveryDelayS;
 
@@ -184,17 +250,26 @@ public final class AppConfig {
      */
     public final int recoveryMaxAttempts;
 
+    /**
+     * {@code execution.sweep_on_start} -- in live mode, sell any coin balance worth at least {@link
+     * #minOrderRial} to rial at startup. Default {@code true}. Pending recoveries do not survive a
+     * restart; this is the safety net.
+     */
+    public final boolean sweepOnStart;
+
     // -- report -------------------------------------------------------------------------------
 
     /**
      * {@code report.csv_path} -- file receiving one row per completed episode (closed loop or
-     * recovered abort). Default {@code reports/pnl.csv}. Parent directories are created; rows append.
+     * recovered abort). Default {@code reports/pnl.csv}. Parent directories are created; rows
+     * append.
      */
     public final Path reportCsvPath;
 
     /**
      * {@code report.summary_interval_s} -- log a per-path P&amp;L summary this often, in seconds.
-     * Default {@code 300}. {@code 0} disables the periodic summary (one is still logged at shutdown).
+     * Default {@code 300}. {@code 0} disables the periodic summary (one is still logged at
+     * shutdown).
      */
     public final int summaryIntervalS;
 
@@ -230,15 +305,27 @@ public final class AppConfig {
         this.minOrderRial = num(detection, "min_order_rial", 550_000);
         this.minOrderUsdt = num(detection, "min_order_usdt", 11);
         this.maxBookAgeMillis = (long) (num(detection, "max_book_age_s", 10d) * 1000);
+        this.maxDepthLevels = num(detection, "max_depth_levels", 20d).intValue();
+
+        Map<String, Object> inventory = section(y, "inventory");
+        this.rebalanceNotionals = num(inventory, "rebalance_notionals", 2d).intValue();
+        this.reconcileIntervalS = num(inventory, "reconcile_interval_s", 60d).intValue();
+        this.paperStartIrt = num(inventory, "paper_start_irt", 20_000_000d);
+        this.paperStartUsdt = num(inventory, "paper_start_usdt", 10d);
 
         Map<String, Object> execution = section(y, "execution");
         this.maxOrdersPer10Min = num(execution, "max_orders_per_10min", 60d).intValue();
         this.crossBy = num(execution, "cross_by", 0.005);
         this.maxLegSlippage = num(execution, "max_leg_slippage", 0.01);
         this.legTimeoutS = num(execution, "leg_timeout_s", 15d).intValue();
+        this.rejectRetries = num(execution, "reject_retries", 4d).intValue();
+        this.rejectRetryWaitMs = num(execution, "reject_retry_wait_ms", 1500d).longValue();
         this.cooldownS = num(execution, "cooldown_s", 30d).intValue();
+        this.lossCooldownS = num(execution, "loss_cooldown_s", 600d).intValue();
+        this.maxDailyLossIrt = num(execution, "max_daily_loss_irt", 500_000d);
         this.recoveryDelayS = num(execution, "recovery_delay_s", 600d).intValue();
         this.recoveryMaxAttempts = num(execution, "recovery_max_attempts", 3d).intValue();
+        this.sweepOnStart = bool(execution, "sweep_on_start", true);
 
         Map<String, Object> report = section(y, "report");
         this.reportCsvPath = Path.of(str(report, "csv_path", "reports/pnl.csv"));
@@ -251,14 +338,20 @@ public final class AppConfig {
     }
 
     private void validate() {
-        if (mode == Mode.LIVE && (apiKey == null || apiKey.isBlank() || apiSecret == null || apiSecret.isBlank())) {
+        if (mode == Mode.LIVE
+                && (apiKey == null
+                        || apiKey.isBlank()
+                        || apiSecret == null
+                        || apiSecret.isBlank())) {
             throw new IllegalStateException(
                     "mode=live requires NOBITEX_API_KEY and NOBITEX_API_SECRET in the environment");
         }
         if (tradeNotionalIrt < minOrderRial) {
-            throw new IllegalStateException(String.format(
-                    "detection.trade_notional_irt (%.0f) is below detection.min_order_rial (%.0f); "
-                            + "every order would be rejected", tradeNotionalIrt, minOrderRial));
+            throw new IllegalStateException(
+                    String.format(
+                            "detection.trade_notional_irt (%.0f) is below detection.min_order_rial"
+                                    + " (%.0f); every order would be rejected",
+                            tradeNotionalIrt, minOrderRial));
         }
         if (minProfitRatio <= 0) {
             throw new IllegalStateException("detection.min_profit_ratio must be positive");
@@ -266,9 +359,15 @@ public final class AppConfig {
         if (crossBy <= 0 || crossBy > 0.05) {
             throw new IllegalStateException("execution.cross_by should be in (0, 0.05]");
         }
+        if (maxDepthLevels < 1 || rebalanceNotionals < 1 || rejectRetries < 0) {
+            throw new IllegalStateException(
+                    "detection.max_depth_levels and inventory.rebalance_notionals must be >= 1,"
+                            + " execution.reject_retries >= 0");
+        }
         if (legTimeoutS <= 0 || recoveryDelayS < 0 || recoveryMaxAttempts < 1) {
             throw new IllegalStateException(
-                    "execution.leg_timeout_s must be > 0, recovery_delay_s >= 0, recovery_max_attempts >= 1");
+                    "execution.leg_timeout_s must be > 0, recovery_delay_s >= 0,"
+                            + " recovery_max_attempts >= 1");
         }
     }
 
@@ -280,20 +379,32 @@ public final class AppConfig {
         }
     }
 
-    /** Minimal {@code KEY=value} parser: comments and blank lines skipped, optional surrounding quotes. */
+    /**
+     * Minimal {@code KEY=value} parser: comments and blank lines skipped, optional surrounding
+     * quotes.
+     */
     static Map<String, String> readDotenv(Path file) {
         Map<String, String> out = new HashMap<>();
-        if (!Files.isRegularFile(file)) return out;
+        if (!Files.isRegularFile(file)) {
+            return out;
+        }
         try {
             for (String raw : Files.readAllLines(file, StandardCharsets.UTF_8)) {
                 String line = raw.strip();
-                if (line.isEmpty() || line.startsWith("#")) continue;
-                if (line.startsWith("export ")) line = line.substring("export ".length()).strip();
+                if (line.isEmpty() || line.startsWith("#")) {
+                    continue;
+                }
+                if (line.startsWith("export ")) {
+                    line = line.substring("export ".length()).strip();
+                }
                 int eq = line.indexOf('=');
-                if (eq <= 0) continue;
+                if (eq <= 0) {
+                    continue;
+                }
                 String key = line.substring(0, eq).strip();
                 String value = line.substring(eq + 1).strip();
-                if (value.length() >= 2 && (value.charAt(0) == '"' || value.charAt(0) == '\'')
+                if (value.length() >= 2
+                        && (value.charAt(0) == '"' || value.charAt(0) == '\'')
                         && value.charAt(value.length() - 1) == value.charAt(0)) {
                     value = value.substring(1, value.length() - 1);
                 }
@@ -307,7 +418,9 @@ public final class AppConfig {
 
     private static String envOrDotenv(String key, Map<String, String> dotenv) {
         String v = System.getenv(key);
-        if (v != null && !v.isBlank()) return v;
+        if (v != null && !v.isBlank()) {
+            return v;
+        }
         v = dotenv.get(key);
         return v == null || v.isBlank() ? null : v;
     }

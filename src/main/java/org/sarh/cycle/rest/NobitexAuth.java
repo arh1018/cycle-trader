@@ -12,8 +12,8 @@ import java.util.Base64;
  *
  * <p>Per Nobitex's docs: {@code signature = base64(Ed25519(timestamp + method + urlPath + body))},
  * where {@code urlPath} includes the query string but not the scheme/host, and {@code body} is the
- * raw request body (empty for GET). Required headers: {@code Nobitex-Key}, {@code Nobitex-Signature},
- * {@code Nobitex-Timestamp}.
+ * raw request body (empty for GET). Required headers: {@code Nobitex-Key}, {@code
+ * Nobitex-Signature}, {@code Nobitex-Timestamp}.
  *
  * <p>Both halves of the key pair are 44-character base64 strings and look identical -- passing the
  * public half where the private half belongs still "works" (32 bytes decode fine) but produces
@@ -38,16 +38,20 @@ public final class NobitexAuth {
             KeyFactory kf = KeyFactory.getInstance("Ed25519");
             this.privateKey = kf.generatePrivate(new EdECPrivateKeySpec(params, seed));
         } catch (Exception e) {
-            throw new IllegalArgumentException("private key is not a valid Ed25519 seed: " + e.getMessage(), e);
+            throw new IllegalArgumentException(
+                    "private key is not a valid Ed25519 seed: " + e.getMessage(), e);
         }
     }
 
-    /** Decodes a Nobitex key, accepting both standard and URL-safe base64, with or without padding. */
+    /**
+     * Decodes a Nobitex key, accepting both standard and URL-safe base64, with or without padding.
+     */
     static byte[] decodeKey(String value) {
         String cleaned = value.replaceAll("^[\"']|[\"']$", "");
         int pad = (4 - cleaned.length() % 4) % 4;
         String padded = cleaned + "=".repeat(pad);
-        for (Base64.Decoder decoder : new Base64.Decoder[]{Base64.getDecoder(), Base64.getUrlDecoder()}) {
+        for (Base64.Decoder decoder :
+                new Base64.Decoder[] {Base64.getDecoder(), Base64.getUrlDecoder()}) {
             try {
                 byte[] raw = decoder.decode(padded);
                 if (raw.length == 32) {
@@ -65,7 +69,8 @@ public final class NobitexAuth {
 
     public Signed sign(String method, String urlPathWithQuery, String body) {
         String timestamp = Long.toString(System.currentTimeMillis() / 1000L);
-        String payload = timestamp + method.toUpperCase() + urlPathWithQuery + (body == null ? "" : body);
+        String payload =
+                timestamp + method.toUpperCase() + urlPathWithQuery + (body == null ? "" : body);
         try {
             Signature sig = Signature.getInstance("Ed25519");
             sig.initSign(privateKey);

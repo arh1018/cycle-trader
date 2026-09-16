@@ -1,6 +1,7 @@
 package org.sarh.cycle.market;
 
 import com.fasterxml.jackson.databind.JsonNode;
+
 import org.sarh.cycle.config.AppConfig;
 import org.sarh.cycle.model.Market;
 import org.sarh.cycle.rest.NobitexRestClient;
@@ -28,7 +29,11 @@ public final class MarketDiscovery {
         public final Map<String, Market> usdtBySymbolBase; // base -> <BASE>USDT market
         public final List<String> bases; // ranked, filtered
 
-        Universe(Market usdtIrt, Map<String, Market> irt, Map<String, Market> usdt, List<String> bases) {
+        Universe(
+                Market usdtIrt,
+                Map<String, Market> irt,
+                Map<String, Market> usdt,
+                List<String> bases) {
             this.usdtIrt = usdtIrt;
             this.irtBySymbolBase = irt;
             this.usdtBySymbolBase = usdt;
@@ -55,15 +60,24 @@ public final class MarketDiscovery {
             Map.Entry<String, JsonNode> e = it.next();
             String symbol = e.getKey();
             JsonNode book = e.getValue();
-            if (!book.isObject() || !hasLiveBook(book)) continue;
-            if (symbol.endsWith("IRT")) liveIrt.add(symbol);
-            else if (symbol.endsWith("USDT")) liveUsdt.add(symbol);
+            if (!book.isObject() || !hasLiveBook(book)) {
+                continue;
+            }
+            if (symbol.endsWith("IRT")) {
+                liveIrt.add(symbol);
+            } else if (symbol.endsWith("USDT")) {
+                liveUsdt.add(symbol);
+            }
         }
 
         Set<String> irtBases = new HashSet<>();
-        for (String s : liveIrt) irtBases.add(s.substring(0, s.length() - "IRT".length()));
+        for (String s : liveIrt) {
+            irtBases.add(s.substring(0, s.length() - "IRT".length()));
+        }
         Set<String> usdtBases = new HashSet<>();
-        for (String s : liveUsdt) usdtBases.add(s.substring(0, s.length() - "USDT".length()));
+        for (String s : liveUsdt) {
+            usdtBases.add(s.substring(0, s.length() - "USDT".length()));
+        }
 
         Set<String> candidateBases = new HashSet<>(irtBases);
         candidateBases.retainAll(usdtBases);
@@ -77,32 +91,49 @@ public final class MarketDiscovery {
 
         log.info("{} candidate base coins with both IRT and USDT books", candidateBases.size());
 
-        Map<String, double[]> statsByBase = fetchIrtStats(candidateBases); // base -> [latest, volumeDst]
+        Map<String, double[]> statsByBase =
+                fetchIrtStats(candidateBases); // base -> [latest, volumeDst]
 
-        List<String> ranked = candidateBases.stream()
-                .filter(b -> {
-                    double[] s = statsByBase.get(b);
-                    return s != null && s[1] >= cfg.minVolume24hRial && s[0] > 0;
-                })
-                .sorted((a, b) -> Double.compare(statsByBase.get(b)[1], statsByBase.get(a)[1]))
-                .limit(cfg.maxSymbols)
-                .toList();
+        List<String> ranked =
+                candidateBases.stream()
+                        .filter(
+                                b -> {
+                                    double[] s = statsByBase.get(b);
+                                    return s != null && s[1] >= cfg.minVolume24hRial && s[0] > 0;
+                                })
+                        .sorted(
+                                (a, b) ->
+                                        Double.compare(
+                                                statsByBase.get(b)[1], statsByBase.get(a)[1]))
+                        .limit(cfg.maxSymbols)
+                        .toList();
 
         Map<String, Market> irtMarkets = new LinkedHashMap<>();
         Map<String, Market> usdtMarkets = new LinkedHashMap<>();
         for (String base : ranked) {
             double[] s = statsByBase.get(base);
             double step = precision.getOrDefault(base.toLowerCase(), 1e-6);
-            irtMarkets.put(base, new Market(base.toUpperCase() + "IRT", base.toLowerCase(), "rls",
-                    step, s[0], s[1]));
-            usdtMarkets.put(base, new Market(base.toUpperCase() + "USDT", base.toLowerCase(), "usdt",
-                    step, 0, 0));
+            irtMarkets.put(
+                    base,
+                    new Market(
+                            base.toUpperCase() + "IRT",
+                            base.toLowerCase(),
+                            "rls",
+                            step,
+                            s[0],
+                            s[1]));
+            usdtMarkets.put(
+                    base,
+                    new Market(
+                            base.toUpperCase() + "USDT", base.toLowerCase(), "usdt", step, 0, 0));
         }
 
         double usdtStep = precision.getOrDefault("usdt", 0.01);
         Market usdtIrt = new Market("USDTIRT", "usdt", "rls", usdtStep, 0, 0);
 
-        log.info("universe: {} triangles (x2 directions) after volume/limit filtering", ranked.size());
+        log.info(
+                "universe: {} triangles (x2 directions) after volume/limit filtering",
+                ranked.size());
         return new Universe(usdtIrt, irtMarkets, usdtMarkets, ranked);
     }
 
@@ -133,7 +164,9 @@ public final class MarketDiscovery {
         return out;
     }
 
-    /** base -> [latest rial price, 24h rial volume], via /market/stats, bisecting a failing batch. */
+    /**
+     * base -> [latest rial price, 24h rial volume], via /market/stats, bisecting a failing batch.
+     */
     private Map<String, double[]> fetchIrtStats(Set<String> bases) {
         Map<String, double[]> out = new HashMap<>();
         List<String> list = new ArrayList<>(bases);
@@ -142,7 +175,9 @@ public final class MarketDiscovery {
     }
 
     private void fetchIrtStatsBatch(List<String> bases, Map<String, double[]> out) {
-        if (bases.isEmpty()) return;
+        if (bases.isEmpty()) {
+            return;
+        }
         try {
             // The response echoes the code in the case it was sent ("BTC-rls" vs "btc-rls"), so
             // send lowercase and look up lowercase.
@@ -150,10 +185,12 @@ public final class MarketDiscovery {
             JsonNode stats = rest.marketStats(csv, "rls");
             for (String base : bases) {
                 JsonNode s = stats.path(base.toLowerCase() + "-rls");
-                if (s.isMissingNode()) continue;
+                if (s.isMissingNode()) {
+                    continue;
+                }
                 double latest = s.path("latest").asDouble(0);
                 double volume = s.path("volumeDst").asDouble(0);
-                out.put(base, new double[]{latest, volume});
+                out.put(base, new double[] {latest, volume});
             }
         } catch (Exception e) {
             if (bases.size() == 1) {

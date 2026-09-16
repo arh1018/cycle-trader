@@ -3,16 +3,28 @@ package org.sarh.cycle.model;
 /**
  * Outcome of clearing one leg, from either the paper or the live executor.
  *
- * <p>Amounts are net of exchange fees, in the leg's own currencies:
- * {@code amountIn} is what the leg was asked to convert, {@code amountConsumed} is how much of that
- * was actually matched (less than {@code amountIn} on a partial fill), and {@code amountOut} is
- * what landed in the wallet as a result. {@code amountIn - amountConsumed} is therefore inventory
- * left behind in the input currency, which matters for unwinding an aborted triangle.
+ * <p>Amounts are net of exchange fees, in the leg's own currencies: {@code amountIn} is what the
+ * leg was asked to convert, {@code amountConsumed} how much of that was actually matched, and
+ * {@code amountOut} what landed in the wallet. {@code amountIn - amountConsumed} is inventory left
+ * behind in the input currency.
+ *
+ * <p>Nobitex closes an order as {@code Done} once its unfilled remainder is below the market's
+ * minimum, so {@code matched < ordered} on a completed order is normal. A leg is therefore {@code
+ * FILLED} when it matched essentially all of what was ordered, {@code PARTIAL} when it produced
+ * something but clearly less, and either way the cycle continues with what it got.
  */
 public final class LegResult {
-    public enum Status { FILLED, PARTIAL, FAILED, SKIPPED }
+    public enum Status {
+        FILLED,
+        PARTIAL,
+        FAILED,
+        SKIPPED
+    }
 
-    public final TriangleLeg leg;
+    /** Matched / ordered ratio at or above which a fill counts as complete. */
+    public static final double FILL_TOLERANCE = 0.995;
+
+    public final CycleLeg leg;
     public final Status status;
     public final double amountIn;
     public final double amountConsumed;
@@ -21,8 +33,15 @@ public final class LegResult {
     public final Long exchangeOrderId; // null in paper mode
     public final String note;
 
-    private LegResult(TriangleLeg leg, Status status, double amountIn, double amountConsumed,
-                       double amountOut, double avgPrice, Long exchangeOrderId, String note) {
+    private LegResult(
+            CycleLeg leg,
+            Status status,
+            double amountIn,
+            double amountConsumed,
+            double amountOut,
+            double avgPrice,
+            Long exchangeOrderId,
+            String note) {
         this.leg = leg;
         this.status = status;
         this.amountIn = amountIn;
@@ -34,30 +53,29 @@ public final class LegResult {
     }
 
     /**
-     * @param orderedSrc  src-currency amount actually sent to the exchange (after step rounding)
-     * @param matchedSrc  src-currency amount the exchange reports as matched
-     *
-     * FILLED vs PARTIAL is decided on what was ordered, not on {@code amountIn}: the step-rounding
-     * remainder between the two is genuine leftover input (and is accounted for as such), but a
-     * fully matched order is not a partial fill.
+     * @param orderedSrc src amount actually sent to the exchange (after step rounding)
+     * @param matchedSrc src amount the exchange reports as matched
      */
-    public static LegResult filled(TriangleLeg leg, double amountIn, double orderedSrc, double matchedSrc,
-                                    double amountConsumed, double amountOut, double avgPrice, Long exchangeOrderId) {
-        boolean complete = matchedSrc >= orderedSrc * (1 - 1e-9);
-        return new LegResult(leg, complete ? Status.FILLED : Status.PARTIAL, amountIn, amountConsumed, amountOut,
-                avgPrice, exchangeOrderId, "");
+    public static LegResult filled(
+            CycleLeg leg,
+            double amountIn,
+            double orderedSrc,
+            double matchedSrc,
+            double amountConsumed,
+            double amountOut,
+            double avgPrice,
+            Long exchangeOrderId) {
+        Status s = matchedSrc >= orderedSrc * FILL_TOLERANCE ? Status.FILLED : Status.PARTIAL;
+        return new LegResult(
+                leg, s, amountIn, amountConsumed, amountOut, avgPrice, exchangeOrderId, "");
     }
 
-    public static LegResult failed(TriangleLeg leg, double amountIn, String note) {
+    public static LegResult failed(CycleLeg leg, double amountIn, String note) {
         return new LegResult(leg, Status.FAILED, amountIn, 0, 0, 0, null, note);
     }
 
-    public static LegResult skipped(TriangleLeg leg, double amountIn, String note) {
+    public static LegResult skipped(CycleLeg leg, double amountIn, String note) {
         return new LegResult(leg, Status.SKIPPED, amountIn, 0, 0, 0, null, note);
-    }
-
-    public boolean completed() {
-        return status == Status.FILLED;
     }
 
     public boolean producedAnything() {
@@ -71,9 +89,13 @@ public final class LegResult {
     @Override
     public String toString() {
         return switch (status) {
-            case FILLED -> String.format("%s FILLED in=%.8f out=%.8f @%.6f", leg, amountIn, amountOut, avgPrice);
-            case PARTIAL -> String.format("%s PARTIAL in=%.8f consumed=%.8f out=%.8f @%.6f", leg, amountIn,
-                    amountConsumed, amountOut, avgPrice);
+            case FILLED ->
+                    String.format(
+                            "%s FILLED in=%.8f out=%.8f @%.8f", leg, amountIn, amountOut, avgPrice);
+            case PARTIAL ->
+                    String.format(
+                            "%s PARTIAL in=%.8f consumed=%.8f out=%.8f @%.8f",
+                            leg, amountIn, amountConsumed, amountOut, avgPrice);
             default -> String.format("%s %s (%s)", leg, status, note);
         };
     }

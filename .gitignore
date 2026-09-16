@@ -8,6 +8,7 @@ target/
 *.class
 *.jar
 !.mvn/wrapper/*.jar
+dependency-reduced-pom.xml
 
 # runtime output
 reports/
@@ -23,3 +24,4 @@ reports/
 
 # tooling
 .claude/
+logs/

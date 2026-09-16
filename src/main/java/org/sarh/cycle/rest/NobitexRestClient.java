@@ -3,6 +3,7 @@ package org.sarh.cycle.rest;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.sarh.cycle.model.Side;
 
 import java.math.BigDecimal;
@@ -14,7 +15,9 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Thin REST client for the public market-list and (when credentials are present) trading endpoints. */
+/**
+ * Thin REST client for the public market-list and (when credentials are present) trading endpoints.
+ */
 public final class NobitexRestClient {
 
     private final String baseUrl;
@@ -22,8 +25,8 @@ public final class NobitexRestClient {
     private final HttpClient http;
     // Prices and amounts go out as plain decimals. A double would serialise a rial price like
     // 174485877940 as 1.7448587794E11, which the exchange rejects.
-    private final ObjectMapper json = new ObjectMapper()
-            .enable(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN);
+    private final ObjectMapper json =
+            new ObjectMapper().enable(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN);
 
     public NobitexRestClient(String baseUrl, NobitexAuth auth) {
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
@@ -35,9 +38,17 @@ public final class NobitexRestClient {
         return auth != null;
     }
 
-    /** GET /v3/orderbook/all -- every market with a live book, keyed by symbol (plus a "status" field). */
+    /**
+     * GET /v3/orderbook/all -- every market with a live book, keyed by symbol (plus a "status"
+     * field).
+     */
     public JsonNode orderbookAll() {
         return get("/v3/orderbook/all", "");
+    }
+
+    /** GET /v3/orderbook/{symbol} -- one market's book. Used to refresh a stale cache entry. */
+    public JsonNode orderbookOne(String symbol) {
+        return get("/v3/orderbook/" + symbol, "");
     }
 
     /** GET /v2/options -- coin metadata including display precision. */
@@ -60,8 +71,13 @@ public final class NobitexRestClient {
      * the market's dst unit (rial for *IRT, USDT for *USDT) and must already be rounded to a
      * precision the market accepts.
      */
-    public OrderReceipt addOrder(String src, String dst, Side side, BigDecimal amount, BigDecimal price,
-                                  String clientOrderId) {
+    public OrderReceipt addOrder(
+            String src,
+            String dst,
+            Side side,
+            BigDecimal amount,
+            BigDecimal price,
+            String clientOrderId) {
         requireAuth();
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("type", side.wireValue());
@@ -77,11 +93,17 @@ public final class NobitexRestClient {
         return new OrderReceipt(id, clientOrderId, order.path("status").asText(""));
     }
 
-    /** POST /market/orders/status. The numeric field is {@code id} here (it is {@code order} on cancel). */
+    /**
+     * POST /market/orders/status. The numeric field is {@code id} here (it is {@code order} on
+     * cancel).
+     */
     public JsonNode orderStatus(Long orderId, String clientOrderId) {
         Map<String, Object> body = new LinkedHashMap<>();
-        if (orderId != null) body.put("id", orderId);
-        else if (clientOrderId != null) body.put("clientOrderId", clientOrderId);
+        if (orderId != null) {
+            body.put("id", orderId);
+        } else if (clientOrderId != null) {
+            body.put("clientOrderId", clientOrderId);
+        }
         return post("/market/orders/status", body).path("order");
     }
 
@@ -89,8 +111,11 @@ public final class NobitexRestClient {
     public boolean cancelOrder(Long orderId, String clientOrderId) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("status", "canceled");
-        if (clientOrderId != null) body.put("clientOrderId", clientOrderId);
-        else if (orderId != null) body.put("order", orderId);
+        if (clientOrderId != null) {
+            body.put("clientOrderId", clientOrderId);
+        } else if (orderId != null) {
+            body.put("order", orderId);
+        }
         return "ok".equals(post("/market/orders/update-status", body).path("status").asText());
     }
 
@@ -103,14 +128,21 @@ public final class NobitexRestClient {
      * as a conservative pre-check and as an upper bound for recovery sells.
      */
     public double freeBalance(String currency) {
+        return allFreeBalances().getOrDefault(currency.toLowerCase(), 0d);
+    }
+
+    /** Free balance of every currency with a non-zero wallet, keyed by lowercase code. */
+    public Map<String, Double> allFreeBalances() {
         requireAuth();
         JsonNode wallets = get("/users/wallets/list", "").path("wallets");
+        Map<String, Double> out = new LinkedHashMap<>();
         for (JsonNode w : wallets) {
-            if (currency.equalsIgnoreCase(w.path("currency").asText(""))) {
-                return w.path("activeBalance").asDouble(0);
+            double free = w.path("activeBalance").asDouble(0);
+            if (free > 0) {
+                out.put(w.path("currency").asText("").toLowerCase(), free);
             }
         }
-        return 0;
+        return out;
     }
 
     // -- plumbing ------------------------------------------------------------
@@ -122,12 +154,15 @@ public final class NobitexRestClient {
 
     private JsonNode get(String path, String query) {
         String urlPath = path + query;
-        HttpRequest.Builder rb = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + urlPath))
-                .timeout(Duration.ofSeconds(20))
-                .header("User-Agent", "TraderBot/cycle-trader")
-                .GET();
-        if (auth != null) sign(rb, "GET", urlPath, "");
+        HttpRequest.Builder rb =
+                HttpRequest.newBuilder()
+                        .uri(URI.create(baseUrl + urlPath))
+                        .timeout(Duration.ofSeconds(20))
+                        .header("User-Agent", "TraderBot/cycle-trader")
+                        .GET();
+        if (auth != null) {
+            sign(rb, "GET", urlPath, "");
+        }
         return execute(rb.build());
     }
 
@@ -139,12 +174,13 @@ public final class NobitexRestClient {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        HttpRequest.Builder rb = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + path))
-                .timeout(Duration.ofSeconds(20))
-                .header("User-Agent", "TraderBot/cycle-trader")
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(bodyJson));
+        HttpRequest.Builder rb =
+                HttpRequest.newBuilder()
+                        .uri(URI.create(baseUrl + path))
+                        .timeout(Duration.ofSeconds(20))
+                        .header("User-Agent", "TraderBot/cycle-trader")
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(bodyJson));
         sign(rb, "POST", path, bodyJson);
         return execute(rb.build());
     }
@@ -152,8 +188,8 @@ public final class NobitexRestClient {
     private void sign(HttpRequest.Builder rb, String method, String urlPath, String body) {
         NobitexAuth.Signed signed = auth.sign(method, urlPath, body);
         rb.header("Nobitex-Key", auth.publicKey)
-          .header("Nobitex-Signature", signed.signatureB64())
-          .header("Nobitex-Timestamp", signed.timestamp());
+                .header("Nobitex-Signature", signed.signatureB64())
+                .header("Nobitex-Timestamp", signed.timestamp());
     }
 
     private JsonNode execute(HttpRequest request) {
@@ -161,12 +197,14 @@ public final class NobitexRestClient {
             HttpResponse<String> resp = http.send(request, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() >= 400) {
                 throw new NobitexApiException(
-                        "HTTP " + resp.statusCode() + ": " + resp.body(), "http-" + resp.statusCode());
+                        "HTTP " + resp.statusCode() + ": " + resp.body(),
+                        "http-" + resp.statusCode());
             }
             JsonNode root = json.readTree(resp.body());
             if ("failed".equals(root.path("status").asText())) {
                 throw new NobitexApiException(
-                        root.path("message").asText("request failed"), root.path("code").asText(""));
+                        root.path("message").asText("request failed"),
+                        root.path("code").asText(""));
             }
             return root;
         } catch (NobitexApiException e) {

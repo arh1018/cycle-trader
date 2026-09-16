@@ -2,6 +2,7 @@ package org.sarh.cycle.ws;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,12 +21,13 @@ import java.util.function.BiConsumer;
  * Minimal Centrifugo protocol v2 (JSON) client for Nobitex's public websocket.
  *
  * <p>Protocol notes that matter (see nbtrend's Python client, which this mirrors):
+ *
  * <ul>
- *   <li>Commands are {@code {"<method>": {...}, "id": n}}; replies echo the id.</li>
+ *   <li>Commands are {@code {"<method>": {...}, "id": n}}; replies echo the id.
  *   <li>Pushes arrive as {@code {"push": {"channel": ..., "pub": {"data": "<json string>"}}}} --
- *       {@code data} is a JSON string, not an object, and needs a second parse.</li>
- *   <li>A frame may carry several newline-delimited JSON objects.</li>
- *   <li>The server sends {@code {}} as a ping; reply with {@code {}} within 25s or get dropped.</li>
+ *       {@code data} is a JSON string, not an object, and needs a second parse.
+ *   <li>A frame may carry several newline-delimited JSON objects.
+ *   <li>The server sends {@code {}} as a ping; reply with {@code {}} within 25s or get dropped.
  * </ul>
  *
  * <p>Transport note: {@link WebSocket#sendText} refuses a new send while one is still pending, so
@@ -49,7 +51,8 @@ public final class CentrifugoWebSocketClient {
     private CompletableFuture<?> sendChain = CompletableFuture.completedFuture(null);
     private final Object sendLock = new Object();
 
-    public CentrifugoWebSocketClient(String url, List<String> channels, BiConsumer<String, JsonNode> onPush) {
+    public CentrifugoWebSocketClient(
+            String url, List<String> channels, BiConsumer<String, JsonNode> onPush) {
         this.url = url;
         this.channels = channels;
         this.onPush = onPush;
@@ -69,30 +72,45 @@ public final class CentrifugoWebSocketClient {
     }
 
     private void connectWithBackoff(Duration delay) {
-        if (stopping) return;
+        if (stopping) {
+            return;
+        }
         http.newWebSocketBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
                 .buildAsync(URI.create(url), new Listener())
-                .whenComplete((socket, err) -> {
-                    if (err != null) {
-                        log.warn("websocket connect failed ({}), retrying in {}s", err.toString(), delay.getSeconds());
-                        scheduleReconnect(delay);
-                        return;
-                    }
-                    this.ws = socket;
-                    synchronized (sendLock) {
-                        sendChain = CompletableFuture.completedFuture(null);
-                    }
-                    send("{\"connect\":{},\"id\":" + nextId.getAndIncrement() + "}");
-                    for (String ch : channels) {
-                        send("{\"subscribe\":{\"channel\":\"" + ch + "\"},\"id\":" + nextId.getAndIncrement() + "}");
-                    }
-                    log.info("websocket connected, subscribing to {} channel(s)", channels.size());
-                });
+                .whenComplete(
+                        (socket, err) -> {
+                            if (err != null) {
+                                log.warn(
+                                        "websocket connect failed ({}), retrying in {}s",
+                                        err.toString(),
+                                        delay.getSeconds());
+                                scheduleReconnect(delay);
+                                return;
+                            }
+                            this.ws = socket;
+                            synchronized (sendLock) {
+                                sendChain = CompletableFuture.completedFuture(null);
+                            }
+                            send("{\"connect\":{},\"id\":" + nextId.getAndIncrement() + "}");
+                            for (String ch : channels) {
+                                send(
+                                        "{\"subscribe\":{\"channel\":\""
+                                                + ch
+                                                + "\"},\"id\":"
+                                                + nextId.getAndIncrement()
+                                                + "}");
+                            }
+                            log.info(
+                                    "websocket connected, subscribing to {} channel(s)",
+                                    channels.size());
+                        });
     }
 
     private void scheduleReconnect(Duration delay) {
-        if (stopping) return;
+        if (stopping) {
+            return;
+        }
         CompletableFuture.delayedExecutor(delay.toMillis(), TimeUnit.MILLISECONDS)
                 .execute(() -> connectWithBackoff(nextDelay(delay)));
     }
@@ -105,13 +123,23 @@ public final class CentrifugoWebSocketClient {
     /** Serialises outbound messages; see the class comment. */
     private void send(String text) {
         synchronized (sendLock) {
-            sendChain = sendChain.handle((v, e) -> null).thenCompose(v -> {
-                WebSocket w = ws;
-                if (w == null || w.isOutputClosed()) return CompletableFuture.completedFuture(null);
-                return w.sendText(text, true);
-            }).whenComplete((v, e) -> {
-                if (e != null) log.warn("websocket send failed: {}", e.toString());
-            });
+            sendChain =
+                    sendChain
+                            .handle((v, e) -> null)
+                            .thenCompose(
+                                    v -> {
+                                        WebSocket w = ws;
+                                        if (w == null || w.isOutputClosed()) {
+                                            return CompletableFuture.completedFuture(null);
+                                        }
+                                        return w.sendText(text, true);
+                                    })
+                            .whenComplete(
+                                    (v, e) -> {
+                                        if (e != null) {
+                                            log.warn("websocket send failed: {}", e.toString());
+                                        }
+                                    });
         }
     }
 
@@ -133,21 +161,27 @@ public final class CentrifugoWebSocketClient {
         @Override
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
             log.warn("websocket closed: {} {}", statusCode, reason);
-            if (!stopping) scheduleReconnect(RECONNECT_MIN);
+            if (!stopping) {
+                scheduleReconnect(RECONNECT_MIN);
+            }
             return null;
         }
 
         @Override
         public void onError(WebSocket webSocket, Throwable error) {
             log.warn("websocket error: {}", error.toString());
-            if (!stopping) scheduleReconnect(RECONNECT_MIN);
+            if (!stopping) {
+                scheduleReconnect(RECONNECT_MIN);
+            }
         }
     }
 
     private void handleFrame(String frame) {
         for (String line : frame.split("\n")) {
             line = line.strip();
-            if (line.isEmpty()) continue;
+            if (line.isEmpty()) {
+                continue;
+            }
             JsonNode message;
             try {
                 message = json.readTree(line);
@@ -168,7 +202,9 @@ public final class CentrifugoWebSocketClient {
             JsonNode push = message.get("push");
             String channel = push.path("channel").asText("");
             JsonNode dataNode = push.path("pub").path("data");
-            if (dataNode.isMissingNode() || dataNode.isNull()) return;
+            if (dataNode.isMissingNode() || dataNode.isNull()) {
+                return;
+            }
             JsonNode payload;
             try {
                 payload = dataNode.isTextual() ? json.readTree(dataNode.asText()) : dataNode;

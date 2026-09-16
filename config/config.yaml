@@ -1,81 +1,95 @@
 # ===========================================================================
-# cycle-trader -- IRT <-> COIN <-> USDT <-> IRT arbitrage on Nobitex
+# cycle-trader -- IRT <-> COIN <-> USDT cycles on Nobitex
 # ===========================================================================
+# The account holds BOTH rial and USDT. A cycle moves value from one pile to
+# the other through a coin in two legs:
+#   IRT>COIN>USDT   buy COIN with rial, sell it for USDT
+#   USDT>COIN>IRT   buy COIN with USDT, sell it for rial
+# Profit is the rial value of the end pile (USDT at the live USDTIRT rate)
+# against the start pile. USDTIRT itself is traded only to rebalance.
 
 # paper | live
-# paper: opportunities are detected and simulated fills / P&L are logged.
-#        No order is ever sent to the exchange.
-# live:  same detection, but clearing legs place real orders via the signed
-#        REST API. Requires NOBITEX_API_KEY / NOBITEX_API_SECRET.
-mode: "paper"
+mode: "live"
 
 nobitex:
   rest_url: "https://apiv2.nobitex.ir"
   ws_url: "wss://ws.nobitex.ir/connection/websocket"
-  # Credentials are read from the environment, never from this file:
-  #   NOBITEX_API_KEY, NOBITEX_API_SECRET   (Ed25519 API key pair)
-  # Only required in live mode.
+  # Credentials come from the environment or .env (gitignored):
+  #   NOBITEX_API_KEY, NOBITEX_API_SECRET
 
 universe:
-  # Bases are discovered at startup from the live market list (any coin with
-  # both a <BASE>IRT and a <BASE>USDT book). This just bounds/filters that.
   min_24h_rial_volume: 5000000000   # 500,000,000 toman; skip illiquid tails
-  max_symbols: 150                  # cap on triangles, by 24h IRT volume
-  # Nobitex prefixes scaled markets (1K_SHIBIRT, 1M_PEPEIRT, ...). Skipped in
-  # v1 -- see README "Known limitations".
-  exclude_prefixed: true
+  max_symbols: 150                  # cap on coins, by 24h IRT volume
+  exclude_prefixed: true            # 1K_SHIB, 1M_PEPE ... not modelled yet
   exclude_bases: ["USDT", "USDC", "DAI", "BUSD", "TUSD", "FDUSD"]
 
 fees:
-  # Per-leg taker fee assumption. Override with your real 30-day-volume tier.
-  taker_fee_irt: 0.0013    # <base>IRT and USDTIRT legs
+  # Per-leg taker fee. Measured on this account: 0.10% rial / 0.09% USDT.
+  taker_fee_irt: 0.0013    # <base>IRT and USDTIRT legs (conservative)
   taker_fee_usdt: 0.0009   # <base>USDT legs
-  # Extra haircut modelling slippage beyond top-of-book (spread eats more of
-  # the edge the deeper an order walks the book).
-  slippage: 0.0010
+  # Haircut for the book moving between detection and fill. Depth is now
+  # walked explicitly, so this no longer needs to cover thin tops.
+  slippage: 0.0005
 
 detection:
-  # Minimum net profit (after fees + slippage on all 3 legs) to act on.
-  min_profit_ratio: 0.0015
-  # Notional of the IRT leg used to size a detected opportunity, in rial.
-  # Top-of-book depth is not currently checked, so keep this modest relative
-  # to the thinnest leg's visible size -- see README.
-  trade_notional_irt: 5000000
-  # Nobitex rejects any IRT order under ~500,000 rial. MEASURED, not assumed:
-  # 398,030 rejected, 497,538 accepted. The documented 3,000,000 is 6x too
-  # high and, used as a floor, leaves positions that fall below it unsellable.
-  # A little headroom so amount rounding cannot drop under the real limit.
+  # Minimum net profit after fees + slippage on both legs, valued in rial.
+  min_profit_ratio: 0.0035
+  # Rial notional per cycle. The USDT>IRT direction is sized to the same
+  # rial value at the USDTIRT ask. Both legs are priced by walking the
+  # visible book for this size; if depth runs out the cycle is skipped.
+  trade_notional_irt: 3000000
+  # Book levels kept per market for the depth walk.
+  max_depth_levels: 20
+  # Nobitex's real floor for rial orders, MEASURED (~500,000); with headroom.
   min_order_rial: 550000
-  # Nobitex's minimum for USDT-quoted orders, in USDT. Verify against your
-  # account -- a too-small middle leg aborts the triangle after leg 1 filled.
-  min_order_usdt: 11
-  # Ignore a book whose last update is older than this (feed hiccup).
+  # Nobitex's floor for USDT orders. Measured: 0.59 USDT accepted, ~0.3-0.4
+  # rejected. A too-small leg 2 aborts after leg 1 filled.
+  min_order_usdt: 1.0
+  # Ignore a book not updated for longer than this (feed hiccup).
   max_book_age_s: 10
 
+inventory:
+  # When a cycle needs more of its start currency than is free, convert
+  # this many notionals' worth from the other pile via USDTIRT first.
+  rebalance_notionals: 2
+  # Re-read wallet balances this often (only while no trade is in flight,
+  # because balances lag fills by several seconds).
+  reconcile_interval_s: 60
+  # Paper-mode starting piles when no API key is configured.
+  paper_start_irt: 20000000
+  paper_start_usdt: 10
+
 execution:
-  # Hard ceiling on live orders per 10 minutes (Nobitex's own limit is 300).
-  max_orders_per_10min: 60
-  # Legs are placed as limit orders priced this far THROUGH the touch so they
-  # fill immediately like a market order, but cannot walk a thin book further
-  # than this. A leg that does not fill inside leg_timeout_s is cancelled.
+  max_orders_per_10min: 60      # Nobitex's shared limit is 300
+  # Limit price placed this far through the deepest level the walk needs.
   cross_by: 0.005
-  # Log a warning if a fill lands further from the priced-in rate than this.
+  # Warn when a fill's average price is further than this from the walk.
   max_leg_slippage: 0.01
-  # Seconds to wait for a leg to fill before cancelling and aborting the loop.
-  leg_timeout_s: 15
-  # After a triangle runs (or aborts), do not fire the same triangle again for
-  # this long. Prevents re-executing one persistent quote on every tick.
+  # Seconds to wait for a leg to fill before cancelling it.
+  leg_timeout_s: 30
+  # An explicit rejection ("Order Validation Failed") right after the
+  # previous leg is usually the just-bought balance not being spendable
+  # yet. Wait and retry this many times; only a rejection is retried --
+  # a transport error never is, because the order may have landed.
+  reject_retries: 4
+  reject_retry_wait_ms: 1500
+  # Do not fire the same cycle again for this long after it runs.
   cooldown_s: 30
-  # When a loop aborts and leaves inventory stranded in BASE or USDT, sell it
-  # back to rial after this delay, then report the whole episode's P&L.
-  recovery_delay_s: 600
-  # If the unwind itself fails, retry it this many times at the same interval.
+  # ... and for this long after it LOSES money.
+  loss_cooldown_s: 600
+  # Stop trading (until restart) once realised losses over the last 24h
+  # reach this many rial. 0 disables.
+  max_daily_loss_irt: 500000
+  # Leg 2 failed and left the coin stranded: sell it back to the start
+  # currency after this delay, then report the whole episode.
+  recovery_delay_s: 300
   recovery_max_attempts: 3
+  # On startup in live mode, sell any coin balance worth >= min_order_rial
+  # to rial. Pending recoveries do not survive a restart; this is the net.
+  sweep_on_start: true
 
 report:
-  # One row per completed episode (closed loop or recovered abort).
   csv_path: "reports/pnl.csv"
-  # Log a per-path P&L summary this often. 0 disables.
   summary_interval_s: 300
 
 logging:
