@@ -1,0 +1,25 @@
+# credentials
+.env
+.env.*
+!.env.example
+
+# build
+target/
+*.class
+*.jar
+!.mvn/wrapper/*.jar
+
+# runtime output
+reports/
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# tooling
+.claude/

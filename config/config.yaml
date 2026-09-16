@@ -1,0 +1,79 @@
+# ===========================================================================
+# cycle-trader -- IRT <-> COIN <-> USDT <-> IRT arbitrage on Nobitex
+# ===========================================================================
+
+# paper | live
+# paper: opportunities are detected and simulated fills / P&L are logged.
+#        No order is ever sent to the exchange.
+# live:  same detection, but clearing legs place real orders via the signed
+#        REST API. Requires NOBITEX_API_KEY / NOBITEX_API_SECRET.
+mode: "paper"
+
+nobitex:
+  rest_url: "https://apiv2.nobitex.ir"
+  ws_url: "wss://ws.nobitex.ir/connection/websocket"
+  # Credentials are read from the environment, never from this file:
+  #   NOBITEX_API_KEY, NOBITEX_API_SECRET   (Ed25519 API key pair)
+  # Only required in live mode.
+
+universe:
+  # Bases are discovered at startup from the live market list (any coin with
+  # both a <BASE>IRT and a <BASE>USDT book). This just bounds/filters that.
+  min_24h_rial_volume: 5000000000   # 500,000,000 toman; skip illiquid tails
+  max_symbols: 150                  # cap on triangles, by 24h IRT volume
+  # Nobitex prefixes scaled markets (1K_SHIBIRT, 1M_PEPEIRT, ...). Skipped in
+  # v1 -- see README "Known limitations".
+  exclude_prefixed: true
+  exclude_bases: ["USDT", "USDC", "DAI", "BUSD", "TUSD", "FDUSD"]
+
+fees:
+  # Per-leg taker fee assumption. Override with your real 30-day-volume tier.
+  taker_fee_irt: 0.0010    # <base>IRT and USDTIRT legs
+  taker_fee_usdt: 0.0009   # <base>USDT legs
+  # Extra haircut modelling slippage beyond top-of-book (spread eats more of
+  # the edge the deeper an order walks the book).
+  slippage: 0.0010
+
+detection:
+  # Minimum net profit (after fees + slippage on all 3 legs) to act on.
+  min_profit_ratio: 0.0015
+  # Notional of the IRT leg used to size a detected opportunity, in rial.
+  # Top-of-book depth is not currently checked, so keep this modest relative
+  # to the thinnest leg's visible size -- see README.
+  trade_notional_irt: 5000000
+  # Nobitex rejects any IRT order under this amount.
+  min_order_rial: 3000000
+  # Nobitex's minimum for USDT-quoted orders, in USDT. Verify against your
+  # account -- a too-small middle leg aborts the triangle after leg 1 filled.
+  min_order_usdt: 11
+  # Ignore a book whose last update is older than this (feed hiccup).
+  max_book_age_s: 10
+
+execution:
+  # Hard ceiling on live orders per 10 minutes (Nobitex's own limit is 300).
+  max_orders_per_10min: 60
+  # Legs are placed as limit orders priced this far THROUGH the touch so they
+  # fill immediately like a market order, but cannot walk a thin book further
+  # than this. A leg that does not fill inside leg_timeout_s is cancelled.
+  cross_by: 0.005
+  # Log a warning if a fill lands further from the priced-in rate than this.
+  max_leg_slippage: 0.01
+  # Seconds to wait for a leg to fill before cancelling and aborting the loop.
+  leg_timeout_s: 15
+  # After a triangle runs (or aborts), do not fire the same triangle again for
+  # this long. Prevents re-executing one persistent quote on every tick.
+  cooldown_s: 30
+  # When a loop aborts and leaves inventory stranded in BASE or USDT, sell it
+  # back to rial after this delay, then report the whole episode's P&L.
+  recovery_delay_s: 600
+  # If the unwind itself fails, retry it this many times at the same interval.
+  recovery_max_attempts: 3
+
+report:
+  # One row per completed episode (closed loop or recovered abort).
+  csv_path: "reports/pnl.csv"
+  # Log a per-path P&L summary this often. 0 disables.
+  summary_interval_s: 300
+
+logging:
+  level: "INFO"
